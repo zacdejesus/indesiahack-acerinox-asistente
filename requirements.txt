@@ -1,0 +1,2 @@
+# Fase 1 (generar_datos.py) solo usa la libreria estandar.
+# Las dependencias del asistente y la interfaz se anaden en las fases 2 y 3.
