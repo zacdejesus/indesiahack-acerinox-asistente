@@ -1,2 +1,6 @@
-# Fase 1 (generar_datos.py) solo usa la libreria estandar.
-# Las dependencias del asistente y la interfaz se anaden en las fases 2 y 3.
+anthropic>=1.0
+python-dotenv>=1.0
+streamlit>=1.40
+pandas>=2.0
+pyyaml>=6.0
+pytest>=8.0
