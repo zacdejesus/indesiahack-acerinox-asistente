@@ -1,0 +1,472 @@
+# Casos de evaluacion del asistente de inventario.
+#
+# Cada caso tiene: id, categoria, pregunta y espera. `espera` es un conjunto de
+# comprobaciones que se evaluan por codigo sobre el objeto Respuesta del
+# asistente (eval/evaluar.py). Ningun modelo juzga las respuestas.
+#
+# "Productos citados" son las filas reales del inventario de los ids que
+# aparecen en el texto de la respuesta, en el orden en que aparecen.
+#
+# COMPROBACIONES
+#   num_productos: {min: N, max: M}
+#       Numero de productos citados. {min: 1} = recomienda algo;
+#       {max: 0} = no recomienda ningun producto.
+#   todos: condicion | [condicion, ...]
+#       Cada producto citado cumple la condicion. Con una lista, cada producto
+#       debe cumplir al menos una (en un correo: pertenecer a alguna linea).
+#       Sirve para vigilar lo que NO debe ofrecerse (un grado inferior, otro
+#       formato). Si no se cita ningun producto, se cumple.
+#   alguno: [condicion, ...]
+#       Para cada condicion de la lista hay al menos un producto citado que la
+#       cumple. En un correo, una condicion por linea de material.
+#   primero: condicion
+#       El primer producto citado cumple la condicion: la recomendacion
+#       principal es la correcta.
+#   stock_total_min_kg: N
+#       El stock de los productos citados suma al menos N kg (pedidos que
+#       ningun producto cubre por si solo).
+#   herramientas: [nombre, ...]
+#       Cada herramienta se llamo al menos una vez sin error.
+#   verificada: true | false
+#       La respuesta paso el verificador (no se sustituyo por el texto seguro).
+#   termina_en_pregunta: true
+#       La ultima linea no vacia de la respuesta contiene un signo "?".
+#   idioma: es | en
+#       Idioma de la respuesta, estimado contando palabras muy frecuentes.
+#
+# CONDICIONES
+#   Una condicion es un diccionario campo -> valor sobre las columnas del
+#   inventario (id, grado, formato, acabado, espesor_mm, ancho_mm, stock_kg,
+#   almacen...). Todos los campos deben cumplirse. El valor puede ser:
+#     316L                  igual a ese valor
+#     [316L, 2205]          alguno de la lista
+#     {min: 3, max: 3.2}    rango numerico (min y max son opcionales)
+#   En barras, ancho_mm y espesor_mm son el diametro; en tubos, ancho_mm es el
+#   diametro exterior y espesor_mm la pared.
+#
+# Los grados aceptables siguen la regla del dominio: se puede subir de grado
+# (316 -> 316L -> 2205), nunca bajar. tests/test_eval.py comprueba que estas
+# expectativas se pueden cumplir con el inventario actual.
+
+# Se añade a `espera` de todos los casos, salvo que el caso diga otra cosa.
+por_defecto:
+  verificada: true
+
+casos:
+
+  # --- Peticion directa con stock ------------------------------------------
+
+  - id: dir-01
+    categoria: directa
+    pregunta: Necesito chapa 304 2B de 1,5 mm, unos 1.000 kg. ¿Qué tenemos?
+    espera:
+      num_productos: {min: 1}
+      primero: {grado: "304", formato: chapa, acabado: 2B, espesor_mm: 1.5}
+      todos: {formato: chapa, grado: ["304", 304L, 316L]}
+      herramientas: [buscar_stock]
+
+  - id: dir-02
+    categoria: directa
+    pregunta: ¿Tenemos tubo 316L de 60,3 mm de diámetro exterior? Necesito unos 800 kg.
+    espera:
+      num_productos: {min: 1}
+      primero: {grado: 316L, formato: tubo, ancho_mm: 60.3}
+      todos: {formato: tubo, grado: [316L, "2205"]}
+      herramientas: [buscar_stock]
+
+  - id: dir-03
+    categoria: directa
+    pregunta: Barra redonda de 304L de 20 mm de diámetro, unos 400 kg, con salida desde Madrid.
+    espera:
+      primero: {grado: 304L, formato: barra, ancho_mm: 20, almacen: Madrid}
+      todos: {formato: barra, grado: [304L, 316L]}
+      herramientas: [buscar_stock]
+
+  # Dificil: hay fleje de 50 mm, que no vale. Uno mas ancho si (se corta).
+  - id: dir-04
+    categoria: directa
+    pregunta: Fleje 304 2B de 1,2 mm de espesor. El cliente necesita 90 mm de ancho útil, 5 toneladas.
+    espera:
+      primero: {grado: "304", formato: fleje, espesor_mm: 1.2}
+      todos: {formato: fleje, ancho_mm: {min: 90}, grado: ["304", 304L, 316L]}
+      herramientas: [buscar_stock]
+
+  # --- Sin stock: debe acabar en alternativa ----------------------------------
+
+  # Escenario de demo: 316 agotada en Madrid; hay 316L en Madrid y 316 en Barcelona.
+  - id: sin-01
+    categoria: sin_stock
+    pregunta: Chapa 316 2B de 2 mm, 1.500 kg, para entregar desde Madrid.
+    espera:
+      alguno:
+        - {grado: ["316", 316L], formato: chapa, espesor_mm: 2, stock_kg: {min: 1}}
+      todos: {formato: chapa, grado: ["316", 316L, "2205"]}
+      herramientas: [buscar_stock, alternativas]
+
+  # El 310S no tiene grado sustituto: la unica salida es el almacen de Madrid.
+  - id: sin-02
+    categoria: sin_stock
+    pregunta: Chapa 310S de 12 mm laminada en caliente. La necesito en Barcelona.
+    espera:
+      alguno:
+        - {grado: 310S, formato: chapa, espesor_mm: 12, almacen: Madrid, stock_kg: {min: 1}}
+      todos: {grado: 310S, formato: chapa}
+      herramientas: [buscar_stock]
+
+  # Dificil: el 2205 no tiene sustituto. Vale otro espesor de 2205, nunca un 316L.
+  - id: sin-03
+    categoria: sin_stock
+    pregunta: Bobina de dúplex 2205 en 2B de 1,5 mm, 20 toneladas.
+    espera:
+      alguno:
+        - {grado: "2205", formato: bobina, stock_kg: {min: 1}}
+      todos: {grado: "2205", formato: bobina}
+      herramientas: [buscar_stock]
+
+  # Dificil: no hay alternativa. La trampa es que si hay tubo 316L de 60,3 mm,
+  # pero ofrecerlo seria bajar de grado. Debe decir que no hay.
+  - id: sin-04
+    categoria: sin_stock
+    pregunta: Tubo de dúplex 2205 de 60,3 mm de diámetro exterior y pared de 2,77 mm, 500 kg.
+    espera:
+      todos: {grado: "2205", formato: tubo}
+      herramientas: [buscar_stock]
+
+  # --- Aplicacion sin grado ---------------------------------------------------
+
+  - id: apl-01
+    categoria: aplicacion
+    pregunta: Un cliente va a fabricar barandillas para un paseo marítimo y me pide chapa de 2 mm. ¿Qué le ofrezco?
+    espera:
+      num_productos: {min: 1}
+      todos: {formato: chapa, grado: ["316", 316L, "2205"]}
+      herramientas: [ficha_tecnica, buscar_stock]
+
+  - id: apl-02
+    categoria: aplicacion
+    pregunta: Chapa para las mesas de trabajo de una cocina industrial, acabado satinado, 1,5 mm de espesor.
+    espera:
+      alguno:
+        - {acabado: N4, espesor_mm: 1.5}
+      todos: {formato: chapa, grado: ["304", 304L, "316", 316L]}
+      herramientas: [ficha_tecnica, buscar_stock]
+
+  # Dificil: a 1.050 °C solo vale el 310S (el 321 se queda en 850-900 °C).
+  - id: apl-03
+    categoria: aplicacion
+    pregunta: Chapa de 3 mm para el interior de un horno de tratamiento térmico que trabaja a 1.050 °C.
+    espera:
+      alguno:
+        - {espesor_mm: 3}
+      todos: {grado: 310S, formato: chapa}
+      herramientas: [ficha_tecnica, buscar_stock]
+
+  # Interior sin exigencia de corrosion: lo razonable es 430 o 304, no un 316L.
+  - id: apl-04
+    categoria: aplicacion
+    pregunta: Paneles decorativos para el interior de cabinas de ascensor en un edificio de oficinas. Acabado brillante, chapa fina de 0,6 mm.
+    espera:
+      primero: {grado: ["430", "304", 304L]}
+      todos: {formato: chapa, acabado: BA}
+      herramientas: [ficha_tecnica, buscar_stock]
+
+  # Dificil: inmersion en agua de mar. La ficha del 316L remite al 2205.
+  - id: apl-05
+    categoria: aplicacion
+    pregunta: Chapa de 10 mm para un depósito de una desaladora, en contacto permanente con agua de mar.
+    espera:
+      alguno:
+        - {espesor_mm: 10}
+      todos: {grado: "2205", formato: chapa}
+      herramientas: [ficha_tecnica, buscar_stock]
+
+  # --- Designaciones alternativas ---------------------------------------------
+
+  - id: des-01
+    categoria: designacion
+    pregunta: ¿Tenemos EN 1.4404 en chapa 2B de 2 mm?
+    espera:
+      primero: {grado: 316L, formato: chapa, espesor_mm: 2}
+      todos: {grado: [316L, "2205"]}
+
+  - id: des-02
+    categoria: designacion
+    pregunta: Me piden UNS S32205 en chapa de 12 mm, 5 toneladas.
+    espera:
+      primero: {grado: "2205", formato: chapa, espesor_mm: 12}
+      todos: {grado: "2205"}
+
+  - id: des-03
+    categoria: designacion
+    pregunta: Bobina AISI 430 BA de 0,6 mm, 10 toneladas.
+    espera:
+      primero: {grado: "430", formato: bobina, acabado: BA, espesor_mm: 0.6}
+      todos: {formato: bobina, grado: ["430", "304"]}
+
+  # Dificil: "W.Nr." no es un prefijo que el backend reconozca; el modelo tiene
+  # que quedarse con 1.4541 (321).
+  - id: des-04
+    categoria: designacion
+    pregunta: El plano del cliente pone W.Nr. 1.4541. Necesita fleje de 1,2 mm de espesor y 200 mm de ancho.
+    espera:
+      primero: {grado: "321", formato: fleje, espesor_mm: 1.2}
+      todos: {formato: fleje, ancho_mm: {min: 200}, grado: ["321", 310S]}
+
+  # --- Unidades no metricas ---------------------------------------------------
+
+  # 1/8" = 3,175 mm. No existe ese espesor: lo correcto es ofrecer 3 mm y decirlo.
+  - id: uni-01
+    categoria: unidades
+    pregunta: Chapa 304 satinada de 1/8 de pulgada de espesor, 2 toneladas.
+    espera:
+      alguno:
+        - {grado: "304", formato: chapa, espesor_mm: {min: 3, max: 3.2}}
+      todos: {formato: chapa, espesor_mm: {min: 2.5, max: 4}}
+
+  # 1" = 25,4 mm: la barra de 25 mm.
+  - id: uni-02
+    categoria: unidades
+    pregunta: Barra redonda de 304L de 1 pulgada de diámetro, 500 kg.
+    espera:
+      primero: {grado: 304L, formato: barra}
+      todos: {formato: barra, ancho_mm: {min: 24.4, max: 26.4}}
+
+  # 48" = 1.219 mm: valen las bobinas de 1250 y 2000, no la de 1000.
+  - id: uni-03
+    categoria: unidades
+    pregunta: Bobina 316L satinada de 0,8 mm, mínimo 48 pulgadas de ancho, 20 toneladas.
+    espera:
+      primero: {grado: 316L, formato: bobina, espesor_mm: 0.8}
+      todos: {formato: bobina, ancho_mm: {min: 1219}}
+
+  # --- Medidas imposibles o grado inexistente: no debe recomendar nada ---------
+
+  - id: imp-01
+    categoria: imposible
+    pregunta: Chapa 304 de 500 mm de espesor, 2 toneladas.
+    espera:
+      num_productos: {max: 0}
+
+  # Martensitico templable: no esta en el inventario y ningun grado lo sustituye.
+  - id: imp-02
+    categoria: imposible
+    pregunta: Chapa de inoxidable martensítico 420 de 3 mm, templable, para cuchillería.
+    espera:
+      num_productos: {max: 0}
+
+  - id: imp-03
+    categoria: imposible
+    pregunta: Chapa de aluminio 5754 de 3 mm, 1.500 kg.
+    espera:
+      num_productos: {max: 0}
+
+  - id: imp-04
+    categoria: imposible
+    pregunta: Bobina 304 con 4 metros de ancho, sin cortes ni soldaduras.
+    espera:
+      num_productos: {max: 0}
+
+  # --- Pregunta ambigua: una pregunta de aclaracion y ningun producto ----------
+
+  - id: amb-01
+    categoria: ambigua
+    pregunta: Necesito acero inoxidable para un cliente.
+    espera:
+      num_productos: {max: 0}
+      termina_en_pregunta: true
+
+  - id: amb-02
+    categoria: ambigua
+    pregunta: Chapa de 2 mm, urgente.
+    espera:
+      num_productos: {max: 0}
+      termina_en_pregunta: true
+
+  # --- Pregunta en ingles -----------------------------------------------------
+
+  - id: ing-01
+    categoria: ingles
+    pregunta: Do you have 316L sheet, 2B finish, 2 mm thick, in Madrid? I need about 3 tonnes.
+    espera:
+      idioma: en
+      primero: {grado: 316L, formato: chapa, espesor_mm: 2, almacen: Madrid}
+      todos: {grado: [316L, "2205"]}
+
+  - id: ing-02
+    categoria: ingles
+    pregunta: Which grade would you recommend for a heat exchanger running on seawater? We need 12 mm plate, about 5 tonnes.
+    espera:
+      idioma: en
+      alguno:
+        - {espesor_mm: 12}
+      todos: {grado: "2205", formato: chapa}
+      herramientas: [ficha_tecnica, buscar_stock]
+
+  # --- Cantidad que ningun producto cubre por si solo -------------------------
+
+  # Tres bobinas de 30, 32 y 42 t: hay que combinar al menos dos.
+  - id: can-01
+    categoria: cantidad
+    pregunta: Necesito 80 toneladas de bobina 304 BA de 2 mm. El cliente no admite otro acabado ni otro espesor.
+    espera:
+      num_productos: {min: 2}
+      stock_total_min_kg: 80000
+      todos: {formato: bobina, acabado: BA, espesor_mm: 2, grado: ["304", 304L, 316L]}
+
+  # Dificil: de 316 solo hay 1,8 t (Barcelona). Para llegar a 5 t hay que
+  # completar con la 316L equivalente.
+  - id: can-02
+    categoria: cantidad
+    pregunta: Necesito 5 toneladas de chapa 316 2B de 2 mm, sin cambiar de acabado ni de espesor. Me da igual el almacén.
+    espera:
+      num_productos: {min: 2}
+      stock_total_min_kg: 5000
+      alguno:
+        - {grado: "316", espesor_mm: 2, stock_kg: {min: 1}}
+      todos: {formato: chapa, acabado: 2B, espesor_mm: 2, grado: ["316", 316L, "2205"]}
+
+  # --- Prioridad comercial: entre varios validos, primero el stock parado ------
+  # `todos` delimita los candidatos validos y `primero` es el que devuelve
+  # prioridad_comercial en cabeza (el test de coherencia lo recalcula).
+
+  # Escenario de demo: 4,3 t paradas 280 dias en Valencia.
+  - id: pri-01
+    categoria: prioridad
+    pregunta: Un fabricante de electrodomésticos quiere chapa 430 BA de 0,6 mm. Hay varias referencias, ¿cuál le ofrezco primero?
+    espera:
+      primero: {id: ACX-00499}
+      todos: {grado: "430", formato: chapa, acabado: BA, espesor_mm: 0.6}
+      herramientas: [buscar_stock, prioridad_comercial]
+
+  - id: pri-02
+    categoria: prioridad
+    pregunta: Bobina 430 satinada (N4) de 0,8 mm, 20 toneladas. ¿Cuál nos interesa más vender?
+    espera:
+      primero: {id: ACX-00421}
+      todos: {grado: "430", formato: bobina, acabado: N4, espesor_mm: 0.8}
+      herramientas: [buscar_stock, prioridad_comercial]
+
+  # Dificil: el orden de buscar_stock (solo rotacion) pone delante otra bobina.
+  # Solo acierta si consulta prioridad_comercial y le hace caso.
+  - id: pri-03
+    categoria: prioridad
+    pregunta: Bobina 430 BA de 0,5 mm, 20 toneladas. Las tres que hay le valen al cliente, ¿cuál priorizamos?
+    espera:
+      primero: {id: ACX-00064}
+      todos: {grado: "430", formato: bobina, acabado: BA, espesor_mm: 0.5}
+      herramientas: [buscar_stock, prioridad_comercial]
+
+  # --- Correos de cliente con varias lineas -----------------------------------
+
+  - id: cor-01
+    categoria: correo
+    pregunta: |
+      Te pego el correo de un cliente:
+
+      Buenos días:
+      Necesitamos oferta y plazo para el siguiente material:
+      - 2.000 kg de chapa 304 2B de 2 mm
+      - 500 kg de tubo 316L de 60,3 x 3,68 mm
+      - 800 kg de barra redonda 304L de diámetro 60 mm
+      Gracias de antemano.
+      Marta Ruiz, Compras, Calderería del Henares
+    espera:
+      alguno:
+        - {grado: ["304", 304L], formato: chapa, espesor_mm: 2}
+        - {grado: 316L, formato: tubo, ancho_mm: 60.3}
+        - {grado: [304L, 316L], formato: barra, ancho_mm: 60}
+      todos:
+        - {formato: chapa, grado: ["304", 304L, 316L]}
+        - {formato: tubo, grado: [316L, "2205"]}
+        - {formato: barra, grado: [304L, 316L]}
+      herramientas: [buscar_stock]
+
+  # Dificil: designaciones EN y una linea sin stock (la 316 de Madrid).
+  - id: cor-02
+    categoria: correo
+    pregunta: |
+      Me llega esto de un cliente de Madrid, ¿qué le contesto?
+
+      Hola, necesito precio para:
+      1) Chapa 1.4401 2B, 2 mm, 1500x3000, unos 1.000 kg. Tiene que salir de vuestro almacén de Madrid.
+      2) Bobina 1.4016 BA de 0,6 mm, 10 toneladas.
+      3) Fleje 1.4301 2B de 1,5 mm de espesor y 200 mm de ancho, 2 toneladas.
+      Un saludo, Javier
+    espera:
+      alguno:
+        - {grado: ["316", 316L], formato: chapa, espesor_mm: 2, stock_kg: {min: 1}}
+        - {grado: "430", formato: bobina, acabado: BA, espesor_mm: 0.6}
+        - {grado: "304", formato: fleje, espesor_mm: 1.5, ancho_mm: {min: 200}}
+      todos:
+        - {formato: chapa, grado: ["316", 316L, "2205"]}
+        - {formato: bobina, grado: ["430", "304"]}
+        - {formato: fleje, grado: ["304", 304L, 316L], ancho_mm: {min: 200}}
+      herramientas: [buscar_stock, alternativas]
+
+  # Dificil: en ingles y con pulgadas y libras. 0.118" = 3 mm, 59" = 1.499 mm
+  # (la bobina de 1250 no vale), 6.625" = 168,3 mm.
+  - id: cor-03
+    categoria: correo
+    pregunta: |
+      Customer email, please advise:
+
+      Dear Sirs,
+      Please quote the following items:
+      1. Grade 430 coil, 2B finish, 0.118 in thick, minimum width 59 in - 30,000 lb
+      2. Duplex 2205 plate, 12 mm - 5 metric tons
+      3. 316L tube, 6.625 in OD, 2 mm wall - 2,000 lb
+      Best regards,
+      Tom Becker, Purchasing, Northfield Tanks Ltd
+    espera:
+      idioma: en
+      alguno:
+        - {grado: "430", formato: bobina, espesor_mm: 3, ancho_mm: {min: 1498}}
+        - {grado: "2205", formato: chapa, espesor_mm: 12}
+        - {grado: 316L, formato: tubo, ancho_mm: 168.3}
+      todos:
+        - {formato: bobina, grado: ["430", "304"], ancho_mm: {min: 1498}}
+        - {formato: chapa, grado: "2205"}
+        - {formato: tubo, grado: [316L, "2205"], ancho_mm: 168.3}
+      herramientas: [buscar_stock]
+
+  # Dificil: una linea por aplicacion (solo 310S), una imposible (no hay barra
+  # de mas de 200 mm: no debe citarse ninguna barra) y una normal.
+  - id: cor-04
+    categoria: correo
+    pregunta: |
+      Reenvío el correo de un cliente, a ver qué podemos ofrecer:
+
+      Buenas tardes. Estamos montando un horno nuevo y nos hace falta:
+      - Chapa de 6 mm para el revestimiento de la cámara, que trabaja a 1.000 ºC. Unas 3 toneladas.
+      - Barra de 316L de 250 mm de diámetro, 2 toneladas.
+      - Tubo 316L de 114,3 x 2,77 mm, 1.000 kg.
+      ¿Qué tenéis disponible? Gracias.
+      Luis Ortega, Hornos Industriales del Norte
+    espera:
+      alguno:
+        - {grado: 310S, formato: chapa, espesor_mm: 6}
+        - {grado: 316L, formato: tubo, ancho_mm: 114.3}
+      todos:
+        - {formato: chapa, grado: 310S}
+        - {formato: tubo, grado: [316L, "2205"]}
+      herramientas: [ficha_tecnica, buscar_stock]
+
+  # Dificil: no dice el grado, solo que es a 200 m del mar, y son dos formatos.
+  - id: cor-05
+    categoria: correo
+    pregunta: |
+      Correo de un cliente nuevo:
+
+      Hola, somos instaladores en Cádiz. Tenemos una obra de barandillas a 200 m de la playa y necesitamos:
+      - Tubo de 42,4 mm de diámetro para los pasamanos, unos 300 kg
+      - Chapa de 2 mm para las placas de anclaje, 1 tonelada
+      ¿Qué material nos recomendáis y qué tenéis en stock?
+      Saludos, Antonio
+    espera:
+      alguno:
+        - {formato: tubo, ancho_mm: 42.4}
+        - {formato: chapa, espesor_mm: 2}
+      todos:
+        - {formato: tubo, grado: ["316", 316L, "2205"]}
+        - {formato: chapa, grado: ["316", 316L, "2205"]}
+      herramientas: [ficha_tecnica, buscar_stock]
