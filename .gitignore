@@ -1,6 +1,29 @@
-.env
 .venv/
 __pycache__/
 *.pyc
+.pytest_cache/
 .DS_Store
+
+# Secretos: solo se sube la plantilla .env.example
+.env
+.env.*
+!.env.example
+*.pem
+*.key
 .streamlit/secrets.toml
+.databricks/
+
+# Logs y estado de servidores locales (el pid cambia en cada arranque)
+logs/
+*.log
+.server.pid
+
+# Resultados de cada evaluación: se generan y cambian en cada ejecución
+eval/resultados/
+
+# Editores
+.idea/
+.vscode/
+
+# Material del organizador del hackathon (no es nuestro)
+docs/organizacion/
