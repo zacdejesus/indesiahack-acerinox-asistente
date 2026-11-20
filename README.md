@@ -29,6 +29,18 @@ cp .env.example .env    # pon tu clave en ANTHROPIC_API_KEY
 - Entiende cómo piden los clientes. Acepta el grado como 316L, AISI 316L, 1.4404 o S31603, y correos con varias líneas de material.
 - Sustituciones de grado auditables. Están en una tabla (`asistente/dominio.py`) y solo van hacia un grado igual o superior.
 
+## Casuística básica
+
+| Caso | Ejemplo de pregunta | Qué hace el asistente |
+|---|---|---|
+| Hay stock | Chapa 304 2B de 1,5 mm, 1.000 kg | Propone el producto que mejor encaja, con almacén y stock |
+| Sin stock | Chapa 316 2B de 2 mm, 1.500 kg, desde Madrid | No lo inventa: busca alternativas (otro almacén, grado equivalente, otro espesor) |
+| Norma o nombre técnico | ¿Tenemos EN 1.4404 en chapa 2B de 2 mm? | Traduce la norma al grado interno y busca con él |
+| Pregunta ambigua | Necesito acero inoxidable para un cliente | No recomienda nada: pide grado, formato, medidas y cantidad |
+| Lo que no existe | Chapa de aluminio 5754 de 3 mm | No propone ningún producto: el inventario no tiene nada parecido |
+
+Los casos completos, con su criterio de acierto, están en `eval/preguntas.yaml`.
+
 ## Cómo se puntúa un producto
 
 Cada producto candidato empieza con 100 puntos. `_ajuste` en `asistente/herramientas.py` le resta puntos por cada descuento y deja escrito el motivo en las notas del resultado.
@@ -66,7 +78,7 @@ Variables en `.env`:
 | `LLM_EFFORT` | Profundidad de razonamiento: low, medium, high | `medium` |
 | `LLM_PROVIDER` | Proveedor del modelo | `anthropic` |
 | `DATA_DIR` | Carpeta de datos | `data/` |
-| `PATRON_ID` | Forma de un id de producto (expresión regular) | `\bACX-\d{5}\b` |
+| `PATRON_ID` | Forma de un id de producto (expresión regular) | `\bACX-\d{4,5}\b` |
 
 ## Pasar a los datos reales
 
