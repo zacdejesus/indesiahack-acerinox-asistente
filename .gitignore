@@ -27,3 +27,6 @@ eval/resultados/
 
 # Material del organizador del hackathon (no es nuestro)
 docs/organizacion/
+
+# Plan personal de trabajo: se queda en local, no se publica
+PROMPT.txt

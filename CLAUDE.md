@@ -1,6 +1,6 @@
 # Asistente de inventario comercial (IndesIAhack 2026, reto Acerinox)
 
-Prototipo con datos sintéticos. El plan original está en `PROMPT.txt` y la explicación del diseño en `docs/arquitectura.md`.
+Prototipo con datos sintéticos. La explicación del diseño está en `docs/arquitectura.md`.
 
 ## Comandos
 
