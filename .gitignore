@@ -30,3 +30,6 @@ docs/organizacion/
 
 # Plan personal de trabajo: se queda en local, no se publica
 PROMPT.txt
+
+# Base de la aplicacion (usuarios, ofertas, avisos): se crea al arrancar el servidor
+data/app.db

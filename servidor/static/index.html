@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Inventario Acerinox</title>
+  <meta name="description" content="Disponibilidad, alternativas y ofertas del inventario comercial.">
+  <meta name="theme-color" content="#153354">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/iconos/icono-192.png">
+  <link rel="apple-touch-icon" href="/iconos/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <link rel="stylesheet" href="/estilos.css">
+</head>
+<body>
+  <header class="barra">
+    <div class="marca"><img src="/iconos/icono-192.png" alt="" width="28" height="28"> Inventario</div>
+    <div class="barra-derecha" id="barra-usuario" hidden>
+      <button class="icono" id="btn-avisos-sistema" title="Activar notificaciones" aria-label="Activar notificaciones">🔔<span id="contador" class="contador" hidden>0</span></button>
+      <span class="chip" id="etiqueta-rol"></span>
+      <button class="enlace" id="btn-salir">Salir</button>
+    </div>
+  </header>
+
+  <!-- Inicio de sesion -->
+  <main id="pantalla-login" class="login" hidden>
+    <form id="form-login" class="tarjeta">
+      <h1>Asistente de inventario</h1>
+      <p class="tenue">Prototipo con datos sintéticos.</p>
+      <label>Usuario <input name="usuario" autocomplete="username" required></label>
+      <label>Clave <input name="clave" type="password" autocomplete="current-password" required></label>
+      <button type="submit" class="primario">Entrar</button>
+      <p class="error" id="error-login" hidden></p>
+      <p class="tenue pequeno">Demo: <b>comercial</b> / comercial o <b>cliente</b> / cliente.</p>
+    </form>
+  </main>
+
+  <!-- Aplicacion -->
+  <main id="pantalla-app" hidden>
+    <nav class="pestanas" id="pestanas"></nav>
+
+    <section id="vista-chat" class="vista chat">
+      <!-- Historial: barra lateral en pantallas anchas, panel deslizante en el movil -->
+      <aside id="historial" class="historial" aria-label="Conversaciones">
+        <button type="button" class="primario" id="btn-nueva">+ Nueva conversación</button>
+        <div id="lista-conversaciones" class="lista-conversaciones"></div>
+      </aside>
+      <div id="velo" class="velo" hidden></div>
+      <div class="chat-principal">
+        <div class="cabecera-chat">
+          <button type="button" class="secundario estrecho" id="btn-historial" aria-controls="historial" aria-expanded="false">☰ Historial</button>
+          <span id="titulo-conversacion" class="titulo-conversacion">Nueva conversación</span>
+        </div>
+        <div id="mensajes" class="mensajes" aria-live="polite"></div>
+        <div id="ejemplos" class="ejemplos"></div>
+        <form id="form-pregunta" class="entrada">
+          <textarea id="pregunta" rows="1" placeholder="Escribe tu consulta o pega el correo de un cliente" required></textarea>
+          <button type="submit" class="primario" id="btn-enviar">Enviar</button>
+        </form>
+      </div>
+    </section>
+
+    <section id="vista-ofertas" class="vista" hidden>
+      <h2>Peticiones de oferta</h2>
+      <div id="lista-ofertas" class="lista"></div>
+    </section>
+
+    <section id="vista-avisos" class="vista" hidden>
+      <div class="cabecera-vista">
+        <h2 id="titulo-avisos">Avisos de reposición</h2>
+        <button id="btn-comprobar" class="secundario" hidden>Comprobar stock ahora</button>
+      </div>
+      <p class="tenue pequeno" id="nota-avisos"></p>
+      <div id="lista-avisos" class="lista"></div>
+    </section>
+
+    <section id="vista-notificaciones" class="vista" hidden>
+      <h2>Notificaciones</h2>
+      <div id="lista-notificaciones" class="lista"></div>
+    </section>
+  </main>
+
+  <div id="aviso-flotante" class="flotante" role="status" hidden></div>
+  <script src="/app.js"></script>
+</body>
+</html>

@@ -7,6 +7,7 @@ lo unico que ve el modelo. REGISTRO une las dos cosas.
 
 from . import dominio
 from .datos import Inventario
+from .roles import COMERCIAL, Rol
 
 MAX_RESULTADOS = 8
 TOLERANCIA_DIAMETRO_MM = 1.0
@@ -341,16 +342,22 @@ REGISTRO = [
 _POR_NOMBRE = {h["nombre"]: h for h in REGISTRO}
 
 
-def esquemas() -> list[dict]:
-    """Lo que se le enseña al modelo: nombre, descripcion y parametros de cada herramienta."""
-    return [{k: h[k] for k in ("nombre", "descripcion", "parametros")} for h in REGISTRO]
+def esquemas(rol: Rol = COMERCIAL) -> list[dict]:
+    """Lo que se le enseña al modelo: nombre, descripcion y parametros de las herramientas del rol."""
+    return [{k: h[k] for k in ("nombre", "descripcion", "parametros")} for h in REGISTRO if rol.permite(h["nombre"])]
 
 
-def ejecutar(inv: Inventario, nombre: str, argumentos: dict) -> tuple[dict, bool]:
-    """Ejecuta una herramienta. Devuelve (resultado, es_error) y nunca lanza por culpa del modelo."""
+def ejecutar(inv: Inventario, nombre: str, argumentos: dict, rol: Rol = COMERCIAL) -> tuple[dict, bool]:
+    """Ejecuta una herramienta. Devuelve (resultado, es_error) y nunca lanza por culpa del modelo.
+
+    El resultado sale ya filtrado por el rol: lo que el rol no puede ver no llega al modelo.
+    """
     herramienta = _POR_NOMBRE.get(nombre)
-    if herramienta is None:
-        return {"error": f"No existe la herramienta {nombre!r}. Disponibles: {', '.join(_POR_NOMBRE)}"}, True
+    if herramienta is None or not rol.permite(nombre):
+        # Misma respuesta para una herramienta inexistente que para una vetada:
+        # al modelo del cliente no se le confirma que existan herramientas internas.
+        disponibles = [n for n in _POR_NOMBRE if rol.permite(n)]
+        return {"error": f"No existe la herramienta {nombre!r}. Disponibles: {', '.join(disponibles)}"}, True
     validos = herramienta["parametros"]["properties"]
     sobran = [a for a in argumentos if a not in validos]
     faltan = [a for a in herramienta["parametros"].get("required", []) if a not in argumentos]
@@ -358,6 +365,6 @@ def ejecutar(inv: Inventario, nombre: str, argumentos: dict) -> tuple[dict, bool
         return {"error": f"Argumentos incorrectos para {nombre}. Sobran: {sobran}. Faltan: {faltan}. "
                          f"Válidos: {', '.join(validos)}"}, True
     try:
-        return herramienta["funcion"](inv, **argumentos), False
+        return rol.filtrar(herramienta["funcion"](inv, **argumentos)), False
     except ErrorHerramienta as e:
         return {"error": str(e)}, True

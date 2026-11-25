@@ -7,7 +7,8 @@ Prototipo con datos sintéticos. La explicación del diseño está en `docs/arqu
 ```
 .venv/bin/python -m pytest                    # tests, sin clave ni red
 .venv/bin/python -m asistente "pregunta"      # asistente por terminal
-.venv/bin/streamlit run app.py                # interfaz actual
+.venv/bin/streamlit run app.py                # interfaz Streamlit
+.venv/bin/python -m servidor                  # API + PWA en http://127.0.0.1:8000 (usuarios demo: comercial/comercial, cliente/cliente)
 .venv/bin/python -m eval.evaluar              # evaluación (38 casos)
 LLM_PROVIDER=local <comando>                  # usar el modelo local (servidor MLX en 127.0.0.1:8080)
 ```
@@ -18,7 +19,7 @@ El núcleo (`asistente/agente.py`, `herramientas.py`, `dominio.py`, `validador.p
 
 - Modelo de lenguaje: hecho. Contrato `ProveedorLLM` en `asistente/proveedor.py`, con adaptadores para Claude y para APIs compatibles con OpenAI. Se elige con `LLM_PROVIDER`.
 - Datos: pendiente. Hoy `asistente/datos.py` es una clase concreta sobre SQLite. El objetivo es convertirla en un contrato (igual que `ProveedorLLM`) con un adaptador por origen: SQLite, otra base de datos, una API o lo que entregue Acerinox. Las herramientas solo deben usar los métodos del contrato.
-- Interfaz: pendiente. Hoy es Streamlit (`app.py`). El objetivo es poder usarlo como aplicación web instalable (PWA), de las que se añaden a la pantalla de inicio. Eso exige exponer el asistente por una API HTTP; la interfaz no debe contener lógica de negocio.
+- Interfaz: Streamlit (`app.py`) y PWA. La PWA la sirve la API HTTP del paquete `servidor/` (FastAPI), que solo traduce HTTP a llamadas al núcleo; los permisos por rol están en `asistente/roles.py`. Para instalarla en un móvil hace falta HTTPS (los service workers solo funcionan en https o en localhost).
 
 ## Dirección del producto (acordada el 2026-11-16, sin implementar)
 
