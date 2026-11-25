@@ -49,3 +49,13 @@ SERVIDOR_MLX_DIR = Path(os.getenv("SERVERMLX_DIR", RAIZ.parent / "serverMLX"))
 
 # Tope de vueltas del bucle del agente por pregunta (evita bucles infinitos y costes)
 MAX_PASOS = 8
+
+# Servidor HTTP y PWA (paquete servidor/). Datos propios de la aplicacion
+# (usuarios, peticiones de oferta, avisos): base aparte, el inventario sigue de solo lectura.
+RUTA_APP_DB = Path(os.getenv("APP_DB", DATA / "app.db"))
+# Usuarios de demo, "usuario:clave:rol" separados por comas. Cambiarlos antes de enseñarlo fuera.
+USUARIOS_DEMO = os.getenv("DEMO_USUARIOS", "comercial:comercial:comercial,cliente:cliente:cliente")
+SERVIDOR_HOST = os.getenv("SERVIDOR_HOST", "127.0.0.1")
+SERVIDOR_PUERTO = int(os.getenv("SERVIDOR_PUERTO", "8000"))
+# Solo True detras de HTTPS: con True el navegador no envia la cookie por http.
+COOKIE_SEGURA = os.getenv("COOKIE_SEGURA", "0") == "1"

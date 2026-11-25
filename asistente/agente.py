@@ -12,38 +12,11 @@ from dataclasses import dataclass, field
 from . import config, herramientas
 from .datos import Inventario
 from .proveedor import ErrorProveedor, ProveedorLLM, msg_asistente, msg_herramientas, msg_usuario
+from .roles import COMERCIAL, Rol
 from .validador import Validacion, ids_en_resultado, validar
 
-SISTEMA = """\
-Eres el asesor técnico del inventario comercial de Acerinox. Trabajas para el equipo comercial: \
-te escriben comerciales con una pregunta suelta o pegando el correo de un cliente, y necesitan \
-saber qué producto del inventario ofrecer y por qué.
-
-Cómo trabajar
-- Todo lo que sabes del inventario viene de las herramientas. Recomienda solo productos que una \
-herramienta te haya devuelto en esta conversación y cítalos siempre por su id. Las cifras de stock, \
-precio y almacén son las que devuelve la herramienta, sin redondear ni estimar. Un verificador \
-automático comprueba cada id de tu respuesta contra el inventario.
-- Si el cliente describe una aplicación (ambiente marino, cocina industrial, un horno) en lugar de \
-un grado, consulta la ficha técnica para elegir el grado y explicar el motivo.
-- Si el mensaje pide varios materiales, trata cada línea por separado.
-- Las herramientas trabajan en milímetros y kilos. Si el cliente usa otras unidades, conviértelas \
-y di la conversión que has hecho.
-- Cuando no haya stock o no alcance la cantidad, busca alternativas y explica qué cambia para el \
-cliente. Si tampoco hay alternativas, dilo claramente.
-- Cuando varios productos sirvan técnicamente, consulta la prioridad comercial y propón primero el \
-que más interesa vender, diciendo el motivo.
-- Si falta un dato sin el que no puedes buscar con sentido (por ejemplo, no se sabe ni el grado ni \
-el uso), haz una sola pregunta de aclaración. Si puedes avanzar con una suposición razonable, \
-avanza y di qué has supuesto.
-
-Cómo responder
-- Responde en el idioma en que te escriben, en español por defecto.
-- Empieza por la recomendación: producto (id), almacén y stock. Después el porqué técnico en una o \
-dos frases y, si la hay, la alternativa. Sé breve: quien lee es un comercial con prisa.
-- Si te han pegado el correo de un cliente, añade al final un borrador de respuesta para el \
-cliente, en el idioma del cliente.
-"""
+# Prompt del comercial. Se mantiene el nombre para quien ya lo importaba.
+SISTEMA = COMERCIAL.sistema
 
 _AVISO_VERIFICADOR = (
     "[Verificador automático] Tu respuesta cita ids que no puedo dar por buenos: {detalle}. "
@@ -84,10 +57,20 @@ class Respuesta:
 
 
 class Asistente:
-    def __init__(self, proveedor: ProveedorLLM, inventario: Inventario, max_pasos: int = config.MAX_PASOS):
+    def __init__(self, proveedor: ProveedorLLM, inventario: Inventario, max_pasos: int = config.MAX_PASOS,
+                 rol: Rol = COMERCIAL):
         self._llm = proveedor
         self._inv = inventario
         self._max_pasos = max_pasos
+        self.rol = rol
+
+    @property
+    def inventario(self) -> Inventario:
+        return self._inv
+
+    def con_rol(self, rol: Rol) -> "Asistente":
+        """El mismo asistente (mismo modelo y mismos datos) atendiendo a otro rol."""
+        return Asistente(self._llm, self._inv, self._max_pasos, rol)
 
     def responder(self, pregunta: str, conversacion: Conversacion | None = None) -> Respuesta:
         conv = conversacion if conversacion is not None else Conversacion()
@@ -110,7 +93,7 @@ class Asistente:
         rechazados: list[str] = []
 
         for _ in range(self._max_pasos):
-            r = self._llm.completar(SISTEMA, conv.mensajes, herramientas.esquemas())
+            r = self._llm.completar(self.rol.sistema, conv.mensajes, herramientas.esquemas(self.rol))
             llamadas_llm += 1
             tokens_in += r.tokens_entrada
             tokens_out += r.tokens_salida
@@ -121,7 +104,7 @@ class Asistente:
                 resultados = []
                 for llamada in r.llamadas:
                     t0 = time.perf_counter()
-                    resultado, error = herramientas.ejecutar(self._inv, llamada.nombre, llamada.argumentos)
+                    resultado, error = herramientas.ejecutar(self._inv, llamada.nombre, llamada.argumentos, self.rol)
                     traza.append(Paso(llamada.nombre, llamada.argumentos, resultado, error,
                                       round((time.perf_counter() - t0) * 1000)))
                     conv.evidencia |= ids_en_resultado(resultado)
@@ -159,7 +142,7 @@ class Asistente:
             validacion = validar(texto, conv.evidencia, self._inv)
 
         return Respuesta(
-            texto=texto, productos=self._inv.por_ids(validacion.citados), traza=traza,
+            texto=texto, productos=self.rol.filtrar(self._inv.por_ids(validacion.citados)), traza=traza,
             validacion=validacion, verificada=verificada, rechazados=rechazados,
             reintentada=reintentado, llamadas_llm=llamadas_llm,
             tokens_entrada=tokens_in, tokens_salida=tokens_out,

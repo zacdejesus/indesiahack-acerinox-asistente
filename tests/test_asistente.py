@@ -5,7 +5,7 @@ Uso:  python -m pytest
 
 import pytest
 
-from asistente import dominio, herramientas
+from asistente import dominio, herramientas, roles
 from asistente.agente import Asistente, Conversacion
 from asistente.datos import InventarioSQLite
 from asistente.proveedor import Llamada, RespuestaLLM
@@ -245,3 +245,66 @@ def test_alternativas_en_barra_no_propone_otro_diametro(inv):
 
 def test_un_id_mas_largo_no_se_confunde_con_uno_real(inv):
     assert validar("Mira ACX-004990.", {LENTO_430_VALENCIA}, inv).citados == []
+
+
+# --- Roles ------------------------------------------------------------------------
+# Lo que el cliente no puede ver no llega ni al modelo: se filtra en el nucleo.
+
+INTERNOS = {"margen_pct", "rotacion_dias", "precio_eur_kg", "prioridad", "motivos", "valor_stock_eur",
+            "cobertura_meses"}
+
+
+def _claves(valor) -> set[str]:
+    if isinstance(valor, dict):
+        return set(valor) | set().union(*map(_claves, valor.values()))
+    if isinstance(valor, list):
+        return set().union(*map(_claves, valor))
+    return set()
+
+
+class ModeloQueApunta(ModeloGuionizado):
+    """Como el guionizado, pero guarda tambien el prompt y las herramientas que recibe."""
+
+    def completar(self, sistema, mensajes, herramientas):
+        self.sistemas = getattr(self, "sistemas", []) + [sistema]
+        self.herramientas = [h["nombre"] for h in herramientas]
+        return super().completar(sistema, mensajes, herramientas)
+
+
+def test_el_cliente_no_tiene_prioridad_comercial():
+    assert "prioridad_comercial" not in [h["nombre"] for h in herramientas.esquemas(roles.CLIENTE)]
+    assert "prioridad_comercial" in [h["nombre"] for h in herramientas.esquemas(roles.COMERCIAL)]
+
+
+def test_herramienta_vetada_responde_como_inexistente(inv):
+    r, error = herramientas.ejecutar(inv, "prioridad_comercial", {"lista_ids": [LENTO_430_VALENCIA]}, roles.CLIENTE)
+    assert error and "No existe" in r["error"] and "prioridad_comercial" not in r["error"].split("Disponibles:")[1]
+
+
+def test_resultados_para_el_cliente_sin_datos_internos(inv):
+    for nombre, argumentos in [("buscar_stock", {"grado": "304"}), ("alternativas", {"producto_id": AGOTADO_316_MADRID})]:
+        r, error = herramientas.ejecutar(inv, nombre, argumentos, roles.CLIENTE)
+        assert not error and not _claves(r) & INTERNOS
+        # El comercial sigue viendo precio y rotacion (pero nunca el margen).
+        r, _ = herramientas.ejecutar(inv, nombre, argumentos)
+        assert {"precio_eur_kg", "rotacion_dias"} <= _claves(r) and "margen_pct" not in _claves(r)
+
+
+def test_asistente_del_cliente_usa_su_prompt_herramientas_y_filtro(inv):
+    modelo = ModeloQueApunta(
+        pide("buscar_stock", grado="430", formato="chapa", acabado="BA"),
+        pide("prioridad_comercial", lista_ids=[LENTO_430_VALENCIA]),
+        dice(f"Hay stock: {LENTO_430_VALENCIA} en Valencia."))
+    r = Asistente(modelo, inv, rol=roles.CLIENTE).responder("¿Tenéis 430 BA?")
+    assert modelo.sistemas[0] == roles.CLIENTE.sistema
+    assert "prioridad_comercial" not in modelo.herramientas
+    assert r.traza[1].error   # el intento de usar la herramienta interna falla
+    # Ni el modelo ni la respuesta reciben datos internos.
+    assert not _claves(modelo.mensajes_recibidos) & INTERNOS
+    assert r.productos and not _claves(r.productos) & INTERNOS
+
+
+def test_con_rol_conserva_modelo_y_datos(inv):
+    base = Asistente(ModeloGuionizado(dice("Hola")), inv)
+    cliente = base.con_rol(roles.CLIENTE)
+    assert base.rol is roles.COMERCIAL and cliente.rol is roles.CLIENTE and cliente.inventario is inv
